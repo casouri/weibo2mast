@@ -77,6 +77,15 @@ def get_posted():
     with open(POSTED_POST_FILE, 'r') as fl:
         return json.load(fl)
 
+def cross_posted(post, posted):
+    """Return True if POST is in POSTED.
+POST is a dictionary returned by Weibo.get_one_weibo().
+POSTED is a list of {'toot_id': id, 'weibo_id': id}."""
+    for elm in posted:
+        if elm['weibo_id'] == post['id']:
+            return True
+    return False
+
 ### Main
 
 if __name__ == '__main__':
@@ -104,7 +113,7 @@ if __name__ == '__main__':
             # enough.
             wb.get_one_page(1)
             for post in reversed(wb.weibo):
-                if not (post['id'] in posted):
+                if not cross_posted(post, posted):
                     toot_id = cross_post(post, mast)
                     posted.append({'toot_id': toot_id,
                                    'weibo_id': post['id']})
