@@ -13,12 +13,13 @@ import weibo
 
 POSTED_POST_FILE = 'posted.json'
 MAST_INSTANCE_URL = 'https://botsin.space'
+TOKEN_FILE = 'token.txt'
 
 ### Mastodon
 
 def access_token():
     """Return the access token for mastodon app."""
-    with open('token', 'r') as fl:
+    with open(TOKEN_FILE, 'r') as fl:
         return fl.read().strip()
 
 def cross_post(post, mast):
