@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: UTF-8 -*-
 
 import codecs
 import copy
@@ -17,7 +16,7 @@ from datetime import date, datetime, timedelta
 from time import sleep
 
 import requests
-from lxml import etree
+from lxml import etree, html
 from requests.adapters import HTTPAdapter
 from tqdm import tqdm
 
@@ -558,7 +557,10 @@ class Weibo(object):
         weibo['bid'] = weibo_info['bid']
         text_body = weibo_info['text']
         selector = etree.HTML(text_body)
-        weibo['text'] = etree.HTML(text_body).xpath('string(.)')
+        body = html.document_fromstring(text_body)
+        for br in body.xpath('*//br'):
+            br.tail = '\n' + br.tail if br.tail else '\n'
+        weibo['text'] = body.text_content()
         weibo['article_url'] = self.get_article_url(selector)
         weibo['pics'] = self.get_pics(weibo_info)
         weibo['video_url'] = self.get_video_url(weibo_info)

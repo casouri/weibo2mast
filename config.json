@@ -1,12 +1,7 @@
 {
-    "user_id_list": ["6132597268"],
-    "filter": 1,
-    "since_date": "2018-01-01",
-    "start_page": 1,
-    "write_mode": ["csv"],
-    "original_pic_download": 1,
-    "retweet_pic_download": 1,
-    "original_video_download": 1,
-    "retweet_video_download": 1,
-    "result_dir_name": 0
+  "user_id_list": ["6048193311"],
+  "filter": 0,
+  "mastodon_instance_url": "https://mastodon.social",
+  "toot_len_limit": 500,
+  "max_attachment_count": 4
 }

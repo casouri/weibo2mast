@@ -1,24 +1,43 @@
 # 微博转发毛象bot
 
-支持图片视频，需要服务器（或者自己的电脑）运行。修改自[weibo crawler](https://github.com/dataabc/weibo-crawler)。
+支持图片视频，需要服务器（或者自己的电脑）运行。魔改自[weibo crawler](https://github.com/dataabc/weibo-crawler)。
+
+毛象不能传太长的文字（默认500字，取决于实例的设置）和太大的图片（8MB）或视频（40MB），超出限制的文字会截断，超出限制的图片和视频就不传了。（长微博分段发毛象看起来挺乱的，所以直接截断了。）
 
 ## 安装
 
-确保Python3已安装。
+确保Python 3已安装。
 
 ```shell
-git clone xxx
-cd xxx
+git clone https://github.com/casouri/weibo2mast.git
+cd weibo2mast
 python -m pip install -r requirements.txt
 ```
 
 ## 配置
 
 1. 配置跟踪的用户
-- 首先根据这个说明拿到`user_id`：[如何获取user_id](https://github.com/dataabc/weibo-crawler#如何获取user_id)。
-- 然后打开`config.json`，把`"user_id_list"`改成你想要跟踪的`user_id`。这部份可以参考[程序设置](https://github.com/dataabc/weibo-crawler#3程序设置)。
+- 首先根据这个说明拿到`user_id`：[《如何获取user_id》](https://github.com/dataabc/weibo-crawler#如何获取user_id)。
+- 打开`config.json`，你应该看到类似的默认配置：
+```json
+{
+  "user_id_list": ["6132597268", "6048193311"],
+  "filter": 0,
+  "mastodon_instance_url": "https://mastodon.social",
+  "toot_len_limit": 500,
+  "max_attachment_count": 4
+}
+```
+- 把`"user_id_list"`对应的值改成你想要跟踪的`user_id`。
+- 如果`"filter"`为`0`，bot会转发所有微博，如果为`1`，只转发原创微博。
+- 把`"mastodon_instance_url"`改成你的bot存在的实例地址。
+- `"toot_len_limit"`是实例的字数限制。
+- `"max_attachment_count"`是实例的附件数量限制。
 
-2. 新建bot帐号，在设置里选`</> 开发`，`创建新应用`，权限只需要`write`，点`提交`。把`你的访问令牌`对应的一串字符复制下来，新建`token.txt`文件，粘贴，保存。
+2. 建立bot帐号
+- 新建bot帐号，在设置里选`</> 开发`，`创建新应用`，权限只需要`write`，点`提交`。
+- 成功以后点进新的app里，把`你的访问令牌`对应的一串字符复制下来。
+- 新建`token.txt`文件，粘贴，保存。
 
 ## 运行
 
@@ -26,8 +45,6 @@ python -m pip install -r requirements.txt
 python xpost.py
 ```
 
-## 其他细节
+## 注
 
-– 我把`config.json`设置成了抓取所有微博，包括原创和转发，如果只想要原创，把`config.json`里`"filter"`对应的值改成`1`。
-
-– `config.json`里除了`"user_id_list"`和`"filter"`以外其他的选项都没有效果（因为我魔改了），放着不动就行。
+如果bot卡在一个微博上，估计是因为Mastodon的限流，耐心等待即可。
