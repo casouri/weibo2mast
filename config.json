@@ -1,7 +1,19 @@
 {
-  "user_id_list": ["6048193311"],
-  "filter": 0,
+  "user_list": [
+    {
+      "id": 6048193311,
+      "comment": "知任"
+    },
+    {
+      "id": 6578279612,
+      "comment": "任地域"
+    }
+  ],
+  "include_repost": true,
+  "standalone_repost": true,
+  "include_post_url": false,
   "mastodon_instance_url": "https://mastodon.social",
   "toot_len_limit": 500,
-  "max_attachment_count": 4
+  "max_attachment_count": 4,
+  "delete_after_days": 3
 }
