@@ -21,21 +21,44 @@ python -m pip install -r requirements.txt
 - 打开`config.json`，你应该看到类似的默认配置：
 ```json
 {
-  "user_id_list": ["6132597268", "6048193311"],
-  "filter": 0,
+  "user_list": [
+    {
+      "id": 6048193311,
+      "comment": "速报"
+    },
+    {
+      "id": 6578279612,
+      "comment": "任地域"
+    }
+  ],
   "mastodon_instance_url": "https://mastodon.social",
   "toot_len_limit": 500,
-  "max_attachment_count": 4
+  "max_attachment_count": 4,
+  "include_repost": true,
+  "include_post_url": false,
+  "standalone_repost": true,
 }
 ```
-- 把`"user_id_list"`对应的值改成你想要跟踪的`user_id`。
-- 如果`"filter"`为`0`，bot会转发所有微博，如果为`1`，只转发原创微博。
+- 把`"user_list"`里`"id"`对应的值改成你想要跟踪的`user_id`。
 - 把`"mastodon_instance_url"`改成你的bot存在的实例地址。
 - `"toot_len_limit"`是实例的字数限制。
 - `"max_attachment_count"`是实例的附件数量限制。
+- 如果`"include_repost"`是`true`，bot会转发原创和转发微博，`false`的话只转发原创微博。
+- 如果`"standalone_repost"`是`true`，bot会把转发微博和转发微博转发的微博分开转发，`false`的话会合在一起转发。（转发微博对应的嘟嘟会回复转发微博转发的微博对应的嘟嘟w）
+- 如果`"include_post_url"`是`"true"`，bot会在转发的时候附上原微博的地址。
+
+上面说的`"include_repost"`、`"standalone_repost"`也可以为某个用户单独设置，比如我不想转发这个用户的转发微博：
+
+```json
+{
+  "id": 6048193311,
+  "comment": "速报",
+  "include_repost": false,
+}
+```
 
 2. 建立bot帐号
-- 新建bot帐号，在设置里选`</> 开发`，`创建新应用`，权限只需要`write`，点`提交`。
+- 新建bot帐号，在设置里选`</> 开发`，`创建新应用`，权限只需要`read`和`write`，点`提交`。
 - 成功以后点进新的app里，把`你的访问令牌`对应的一串字符复制下来。
 - 新建`token.txt`文件，粘贴，保存。
 

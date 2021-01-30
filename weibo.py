@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import codecs
 import copy
@@ -14,9 +15,10 @@ import warnings
 from collections import OrderedDict
 from datetime import date, datetime, timedelta
 from time import sleep
+import re
 
 import requests
-from lxml import etree, html
+from lxml import etree
 from requests.adapters import HTTPAdapter
 from tqdm import tqdm
 
@@ -504,6 +506,33 @@ class Weibo(object):
             at_users = ','.join(at_list)
         return at_users
 
+    def get_text_body(self, selector, media_url):
+        """获取文字主体。"""
+        def clear_node(n):
+            for child in n:
+                n.remove(child)
+        selector = copy.deepcopy(selector)
+        # <br/>转成换行。
+        for br in selector.xpath('//br'):
+            br.tail = '\n' + (br.tail or '')
+        # 微博链接转成明文链接。
+        for a in selector.xpath('//a'):
+            text = a.xpath('string()')
+            if text.startswith('@'):
+                continue
+            elif re.match('(#.+?)#', text):
+                a.text = ' ' + \
+                    re.match('(#.+?)#', text).group(1).strip() + ' '
+                clear_node(a)
+            elif re.match('网页链接', text):
+                a.text = a.get('href')
+                clear_node(a)
+            elif a.get('href') and a.get('href') in media_url:
+                continue
+            else:
+                a.tail = '({})'.format(a.get('href') or '')
+        return selector.xpath('string()')
+
     def string_to_int(self, string):
         """字符串转换为整数"""
         if isinstance(string, int):
@@ -557,13 +586,12 @@ class Weibo(object):
         weibo['bid'] = weibo_info['bid']
         text_body = weibo_info['text']
         selector = etree.HTML(text_body)
-        body = html.document_fromstring(text_body)
-        for br in body.xpath('*//br'):
-            br.tail = '\n' + br.tail if br.tail else '\n'
-        weibo['text'] = body.text_content()
+        # Use separate selector.
         weibo['article_url'] = self.get_article_url(selector)
         weibo['pics'] = self.get_pics(weibo_info)
         weibo['video_url'] = self.get_video_url(weibo_info)
+        weibo['text'] = self.get_text_body(
+            selector, weibo['pics'] + weibo['video_url'])
         weibo['location'] = self.get_location(selector)
         weibo['created_at'] = weibo_info['created_at']
         weibo['source'] = weibo_info['source']
@@ -707,8 +735,9 @@ class Weibo(object):
                                             '"的' if self.query else '',
                                             '-' * 30))
                                     return True
-                            if (not self.filter) or (
-                                    'retweet' not in wb.keys()):
+                            if (not self.is_pinned_weibo(w)) \
+                               and ((not self.filter)
+                                    or ('retweet' not in wb.keys())):
                                 self.weibo.append(wb)
                                 self.weibo_id_list.append(wb['id'])
                                 self.got_count += 1
