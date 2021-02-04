@@ -404,7 +404,10 @@ if __name__ == '__main__':
         logger.info('Awake, running')
         # Reload configuration on-the-fly.
         config = get_config()
-        post_list = get_weibo_posts(config, db)
+        try:
+            post_list = get_weibo_posts(config, db)
+        except Exception:
+            post_list = []
 
         for post in post_list:
             summary = post['text'][:30].replace('\n', ' ')
@@ -412,18 +415,21 @@ if __name__ == '__main__':
                         post['screen_name'], summary)
             try:
                 db += cross_post(post, mast, config, db)
+                save_db(db)
+                logger.info('Posted')
             except MastodonError as err:
                 logger.warning(f'Error cross-posting to Mastodon: {err}')
-            save_db(db)
-            logger.info('Posted')
 
         logger.info('Deleting old toots')
         for record in get_old_records(db, config):
             logger.info('Deleting post by %s: %s', record[3],
                         record[4].replace('\n', ' '))
-            delete_toot(record[0], mast)
-            db.remove(record)
-            save_db(db)
+            try:
+                delete_toot(record[0], mast)
+                db.remove(record)
+                save_db(db)
+            except MastodonError as err:
+                logger.warning(f'Error when deleting toot: {err}')
 
         logger.info('Done')
         sleep_time = random.randint(10, 20)
