@@ -9,13 +9,15 @@ import logging
 import sqlite3
 import re
 import unicodedata
+import sqlite3
+import atexit
 
 from mastodon import Mastodon, MastodonError, MastodonAPIError, MastodonNotFoundError
 import requests
 
 import weibo
 
-DATABASE_FILE = 'posted.json'
+DATABASE_FILE = 'posted.sqlite3'
 TOKEN_FILE = 'token.txt'
 
 ### Types
@@ -106,10 +108,14 @@ TOO_MANY). TOOT_LIST is a list of TOOT_DICT.
 def cross_post(post, mast, config, db):
     """Cross-post POST to mastodon.
 MAST is the mastodon api instance. Return a list of POST_RECORD.
+The list could be empty, in which case nothing is tooted.
 """
+    if not should_cross_post(post, config, db):
+        return []
+
     len_limit = config['toot_len_limit'] - 100
     max_attatchment = config['max_attachment_count']
-    user_id = post['user_id']
+    user_id = str(post['user_id'])
     # external_media is specific to monado.ren.
     external_media = get_user_option(user_id, 'external_media', config)
     standalone_repost = get_user_option(user_id,
@@ -151,8 +157,8 @@ MAST is the mastodon api instance. Return a list of POST_RECORD.
             orig_toot_id = record_list[0][0]
             post_record_list += record_list
             body += '#转_bot\n\n'
-        elif get_toot_by_weibo(post, db):
-            orig_toot_id = get_toot_by_weibo(post, db)[0]
+        elif get_toot_by_weibo(post, db) != None:
+            orig_toot_id = get_toot_by_weibo(post, db)
             body += '#转_bot\n\n'
         else:
             body += '#转_bot #{0}_bot\n\n{1}\n\n'.format(
@@ -241,7 +247,7 @@ def get_user_option(user_id, option, config):
 def get_weibo_posts(config, db):
     """Return a list of weibo posts.
 CONFIG is the configuration dictionary described in README.md.
-DBC is the database cursor."""
+DB is the database."""
     post_list = []
     wb = weibo.Weibo(make_weibo_config(config))
     for user in wb.user_config_list:
@@ -252,20 +258,37 @@ DBC is the database cursor."""
         # Only crawl the first page, that should be more than
         # enough.
         wb.get_one_page(1)
+        post_list += reversed(wb.weibo)
 
-        include_repost = get_user_option(int(wb.user['id']),
-                                         'include_repost',
-                                         config)
-
-        for post in reversed(wb.weibo):
-            if cross_posted_p(post, db) \
-               or ((not include_repost) and post_repost_p(post)) \
-               or '微博抽奖平台' in post['text'] \
-               or '转发抽奖' in post['text']:
-                continue
-            else:
-                post_list.append(post)
     return post_list
+
+
+def should_cross_post(post, config, db):
+    """If the POST (a dictionary) should be posted, return True.
+DB is the database."""
+    include_repost = get_user_option(
+        int(post['user_id']), 'include_repost', config)
+    if cross_posted_p(post, db) \
+       or ((not include_repost) and post_repost_p(post)) \
+       or '微博抽奖平台' in post['text'] \
+       or '转发抽奖' in post['text'] \
+       or failed_many_times(post, db):
+        # TODO: Other filters.
+        return False
+    else:
+        return True
+
+
+def failed_many_times(post, db):
+    """Return True if POST failed too many times.
+DB records the number of times POST failed to cross post.
+POST is a dictionary."""
+    weibo_id = str(post['id'])
+    fail_count = db.execute('SELECT fail_count FROM Post WHERE weibo_id = ?', [weibo_id]).fetchone()
+    if fail_count == None:
+        return False
+    else:
+        return fail_count > 3
 
 ### Config
 
@@ -319,10 +342,10 @@ def get_config():
         return config
 
     except FileNotFoundError:
-        logger.error(u'找不到 config.json')
+        logger.error(u'找不到config.json')
         exit(1)
     except json.decoder.JSONDecodeError:
-        logger.error(u'config.json 有语法错误，用网上的json validator检查一下吧')
+        logger.error(u'config.json有语法错误，用网上的json validator检查一下吧')
         exit(1)
     except KeyError as err:
         logger.error(u'config.json里缺少这个选项："%s"', err.args[0])
@@ -332,46 +355,77 @@ def get_config():
 
 def get_db():
     """Return the database."""
-    if not os.path.exists(DATABASE_FILE):
-        with open(DATABASE_FILE, 'a') as fl:
-            json.dump([], fl)
-    with open(DATABASE_FILE, 'r') as fl:
-        return json.load(fl)
+    connection = sqlite3.connect(DATABASE_FILE)
+    # If the table is not created, create it.
+    connection.execute('CREATE TABLE if not exists Post (toot_id text, weibo_id text, user_id text, user_name text, post_sum text, post_time text, fail_count integer);')
+    return connection
 
-    
-def save_db(db):
-    """Save DB to file."""
-    with open(DATABASE_FILE, 'w') as fl:
-        json.dump(db, fl, ensure_ascii=False, indent=2)
 
-        
 def cross_posted_p(post, db):
     """Return True if POST is in DB.
 POST is a dictionary returned by Weibo.get_one_weibo()."""
-    return True if get_toot_by_weibo(post, db) else False
+    return get_toot_by_weibo(post, db) != None
 
 
 def get_toot_by_weibo(post, db):
-    """Return TOOT_ID_LIST that corresponds to POST in DB.
-Return None, if there is no correspoding toot."""
-    toot_id_list = []
-    for row in db:
-        if row[1] == post['id']:
-            toot_id_list.append(row[0])
-    if toot_id_list == []:
-        return None
-    else:
-        return toot_id_list
+    """Return TOOT_ID that corresponds to POST in DB.
+Could return None. POST is a dictionary.
+"""
+    weibo_id = str(post['id'])
+    cur = db.execute('SELECT toot_id FROM Post WHERE weibo_id = ?', [weibo_id])
+    return cur.fetchone()
 
-    
+def get_record_by_weibo(post, db):
+    """Return a dictionary of the record for POST in DB.
+POST is a dictionary.
+"""
+    weibo_id = str(post['id'])
+    cur = db.execute('SELECT * FROM Post WHERE weibo_id = ?', [weibo_id])
+    return cur.fetchone()
+
+
 def make_post_record(post, toot):
-    """Return a POST_RECORD composed with POST and TOOT."""
-    return [
-        toot['id'], post['id'], post['user_id'],
+    """Return a POST_RECORD composed with POST and TOOT.
+POST is the data structure returned from weibo-crawler."""
+    return (
+        toot['id'],
+        str(post['id']),
+        str(post['user_id']),
         unicodedata.normalize('NFC', post['screen_name']),
         post['text'][:20],
-        datetime.now().isoformat()
-    ]
+        datetime.now().isoformat(),
+        0
+    )
+
+
+def record_failure(post, db):
+    """Record a failure to cross post POST in DB.
+POST is a dictionary."""
+    weibo_id = str(post['id'])
+    summary = post['text'][:20]
+    user_id = str(post['user_id'])
+    user_name = unicodedata.normalize('NFC', post['screen_name'])
+    post_time = datetime.now().isoformat()
+
+    fail_count = db.execute('SELECT fail_count FROM Post WHERE weibo_id = ?', [weibo_id]).fetchone()
+    if fail_count != None:
+        db.execute('UPDATE Post SET fail_count = ? WHERE weibo_id = ?',
+                   (fail_count + 1, weibo_id))
+    else:
+        db.execute('INSERT INTO Post VALUES (?,?,?,?,?,?,?)',
+                   ('', weibo_id, user_id, user_name,
+                    summary, post_time, 1))
+    db.commit()
+
+
+def record_success(records, db):
+    """Record successful cross postings RECORD in DB.
+RECORDS is a list of records (tuple)."""
+    ids = [[rec[1]] for rec in records]
+    db.executemany('DELETE FROM Post WHERE weibo_id = ?', ids)
+    db.executemany('INSERT INTO Post VALUES (?,?,?,?,?,?,?)', records)
+    db.commit()
+
 
 def record_older_than(record, n):
     """If record older than N days, return True."""
@@ -380,18 +434,7 @@ def record_older_than(record, n):
     today = datetime.now()
     return (today - post_time).total_seconds() > seconds
 
-def get_old_records(db, config):
-    """Get old records that needs to be deleted according to CONFIG."""
-    days = config['delete_after_days']
-    if days == 0:
-        return []
-    else:
-        delete_list = []
-        for record in db:
-            if record_older_than(record, days):
-                delete_list.append(record)
-        return delete_list
-    
+
 ### Main
 
 if __name__ == '__main__':
@@ -399,39 +442,31 @@ if __name__ == '__main__':
     url = get_config()['mastodon_instance_url']
     mast = Mastodon(access_token=access_token(), api_base_url=url,
                     request_timeout=30)
-
     while True:
-        logger.info('Awake, running')
+        logger.info(u'醒了，运行中')
         # Reload configuration on-the-fly.
         config = get_config()
         try:
             post_list = get_weibo_posts(config, db)
-        except Exception:
+        except Exception as e:
             post_list = []
+            print("Failed to get a list of posts from weibo:")
+            print(e)
 
         for post in post_list:
             summary = post['text'][:30].replace('\n', ' ')
-            logger.info('Cross posting weibo by %s: %s...',
-                        post['screen_name'], summary)
             try:
-                db += cross_post(post, mast, config, db)
-                save_db(db)
-                logger.info('Posted')
+                records = cross_post(post, mast, config, db)
+                record_success(records, db)
+                if records != []:
+                    logger.info(u'转发了%s的微博：%s...',
+                                post['screen_name'], summary)
             except MastodonError as err:
-                logger.warning(f'Error cross-posting to Mastodon: {err}')
+                logger.warning(u'试图转发%s的微博：%s...，但没有成功：%s',
+                               post['screen_name'], summary, str(err))
+                record_failure(post, db)
 
-        logger.info('Deleting old toots')
-        for record in get_old_records(db, config):
-            logger.info('Deleting post by %s: %s', record[3],
-                        record[4].replace('\n', ' '))
-            try:
-                delete_toot(record[0], mast)
-                db.remove(record)
-                save_db(db)
-            except MastodonError as err:
-                logger.warning(f'Error when deleting toot: {err}')
-
-        logger.info('Done')
+        logger.info(u'完成')
         sleep_time = random.randint(10, 20)
-        logger.info(f'Sleeping for {sleep_time} minutes')
+        logger.info(f'睡{sleep_time}分钟')
         time.sleep(sleep_time * 60)
