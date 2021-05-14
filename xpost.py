@@ -153,9 +153,14 @@ The list could be empty, in which case nothing is tooted.
     if post_repost_p(post):
         orig_post = post['retweet']
         if standalone_repost:
-            record_list = cross_post(orig_post, mast, config, db)
-            orig_toot_id = record_list[0][0]
-            post_record_list += record_list
+            # If the original weibo is already cross posted, we don’t
+            # cross post it again.
+            orig_toot_id = get_toot_by_weibo(post, db)
+            if orig_toot_id == None:
+                orig_record_list = cross_post(orig_post, mast, config, db)
+                if len(orig_toot_id) > 0:
+                    orig_toot_id = orig_record_list[0][0]
+                post_record_list += orig_record_list
             body += '#转_bot\n\n'
         elif get_toot_by_weibo(post, db) != None:
             orig_toot_id = get_toot_by_weibo(post, db)
