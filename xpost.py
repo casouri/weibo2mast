@@ -158,7 +158,7 @@ The list could be empty, in which case nothing is tooted.
             orig_toot_id = get_toot_by_weibo(post, db)
             if orig_toot_id == None:
                 orig_record_list = cross_post(orig_post, mast, config, db)
-                if len(orig_toot_id) > 0:
+                if len(orig_record_list) > 0:
                     orig_toot_id = orig_record_list[0][0]
                 post_record_list += orig_record_list
             body += '#转_bot\n\n'
