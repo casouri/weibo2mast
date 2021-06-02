@@ -111,11 +111,11 @@ TOO_MANY). TOOT_LIST is a list of TOOT_DICT.
     return (media_list, media_too_large, media_too_many)
 
 
-def cross_post(post, mast_dict, config, db):
+def cross_post(post, mast_dict, config, db, fallback_mast=None):
     """Cross-post POST to mastodon.
 MAST_DICT is a hash map from weibo author ids (string) to Mastodon
-instances. Return a list of POST_RECORD. The list could be empty, in
-which case nothing is tooted.
+instances. Return a list of POST_RECORD. FALLBACK_MAST is used when we
+cannot find a Mastodon instance from dict for the weibo author.
 """
     if not should_cross_post(post, config, db):
         return []
@@ -142,6 +142,14 @@ which case nothing is tooted.
         media_list, media_too_large, media_too_many = \
             upload_media(url_list[:max_attatchment])
 
+    # Come up with a Mastodon instance for tooting.
+    mast = mast_dict.get(user_id)
+    if mast == None:
+        if fallback_mast != None:
+            mast = fallback_mast
+        else:
+            raise KeyError('Couldn\'t find a Mastodon instance to toot with')
+
     # Compose toot.
     # 1. Compose body text.
     body = '#{0}_bot\n\n{1}\n\n'.format(
@@ -165,7 +173,7 @@ which case nothing is tooted.
             orig_toot_id = get_toot_by_weibo(post, db)
             if orig_toot_id == None:
                 orig_record_list = cross_post(orig_post, mast_dict,
-                                              config, db)
+                                              config, db, mast)
                 if len(orig_record_list) > 0:
                     orig_toot_id = orig_record_list[0][0]
                 post_record_list += orig_record_list
@@ -205,7 +213,6 @@ which case nothing is tooted.
         text += f'源：{post_url}\n'
 
     # 6. Toot!
-    mast = mast_dict[user_id]
     toot = mast.status_post(text, in_reply_to_id=orig_toot_id,
                             media_ids=media_list)
     post_record_list.append(make_post_record(post, toot))
