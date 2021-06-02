@@ -210,7 +210,7 @@ which case nothing is tooted.
                             media_ids=media_list)
     post_record_list.append(make_post_record(post, toot))
     return post_record_list
-
+    
 
 def delete_all_toots(mast):
     """Delete all toots."""
@@ -225,14 +225,13 @@ def delete_all_toots(mast):
                 print('ok')
         time.sleep(30 * 60)
 
-
+                
 def delete_toot(toot_id, mast):
     """Delete toot with TOOT_ID."""
     try:
         mast.status_delete(toot_id)
     except MastodonNotFoundError:
         return
-
 
 ### Post
 
