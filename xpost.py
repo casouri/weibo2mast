@@ -18,7 +18,8 @@ import requests
 import weibo
 
 DATABASE_FILE = 'posted.sqlite3'
-TOKEN_FILE = 'token.txt'
+TOKEN_FILE = 'token.json'
+CONFIG_FILE = 'config.json'
 
 ### Types
 #
@@ -35,11 +36,16 @@ TOKEN_FILE = 'token.txt'
 #             'include_post_url': bool
 #           }
 # USER_CONFIG := {
-#                  'id': int,
+#                  'id': string,
 #                  'include_repost': bool, (optional)
 #                  'external_media': bool, (optional)
 #                  'standalone_repost': bool  (optional)
 #                 }
+# TOKEN_CONFIG := {
+#                   'id': string,
+#                   'token': string
+#                  }
+
 
 ### Logging
 
@@ -105,10 +111,11 @@ TOO_MANY). TOOT_LIST is a list of TOOT_DICT.
     return (media_list, media_too_large, media_too_many)
 
 
-def cross_post(post, mast, config, db):
+def cross_post(post, mast_dict, config, db):
     """Cross-post POST to mastodon.
-MAST is the mastodon api instance. Return a list of POST_RECORD.
-The list could be empty, in which case nothing is tooted.
+MAST_DICT is a hash map from weibo author ids (string) to Mastodon
+instances. Return a list of POST_RECORD. The list could be empty, in
+which case nothing is tooted.
 """
     if not should_cross_post(post, config, db):
         return []
@@ -157,7 +164,8 @@ The list could be empty, in which case nothing is tooted.
             # cross post it again.
             orig_toot_id = get_toot_by_weibo(post, db)
             if orig_toot_id == None:
-                orig_record_list = cross_post(orig_post, mast, config, db)
+                orig_record_list = cross_post(orig_post, mast_dict,
+                                              config, db)
                 if len(orig_record_list) > 0:
                     orig_toot_id = orig_record_list[0][0]
                 post_record_list += orig_record_list
@@ -166,7 +174,7 @@ The list could be empty, in which case nothing is tooted.
             orig_toot_id = get_toot_by_weibo(post, db)
             body += '#转_bot\n\n'
         else:
-            body += '#转_bot #{0}_bot\n\n{1}\n\n'.format(
+            body += '转_bot #{0}_bot\n\n{1}\n\n'.format(
                 orig_post['screen_name'], orig_post['text']
             )
 
@@ -197,11 +205,12 @@ The list could be empty, in which case nothing is tooted.
         text += f'源：{post_url}\n'
 
     # 6. Toot!
+    mast = mast_dict[user_id]
     toot = mast.status_post(text, in_reply_to_id=orig_toot_id,
                             media_ids=media_list)
     post_record_list.append(make_post_record(post, toot))
     return post_record_list
-    
+
 
 def delete_all_toots(mast):
     """Delete all toots."""
@@ -216,13 +225,14 @@ def delete_all_toots(mast):
                 print('ok')
         time.sleep(30 * 60)
 
-                
+
 def delete_toot(toot_id, mast):
     """Delete toot with TOOT_ID."""
     try:
         mast.status_delete(toot_id)
     except MastodonNotFoundError:
         return
+
 
 ### Post
 
@@ -272,7 +282,7 @@ def should_cross_post(post, config, db):
     """If the POST (a dictionary) should be posted, return True.
 DB is the database."""
     include_repost = get_user_option(
-        int(post['user_id']), 'include_repost', config)
+        str(post['user_id']), 'include_repost', config)
     if cross_posted_p(post, db) \
        or ((not include_repost) and post_repost_p(post)) \
        or '微博抽奖平台' in post['text'] \
@@ -334,29 +344,67 @@ Python will emit KeyError."""
     config['include_repost'], config['include_post_url']
 
 
-def get_config():
+def get_config(config_file, validator=validate_config):
     """Return the config dictionary."""
     config_path = os.path.split(os.path.realpath(__file__))[0] \
-        + os.sep + 'config.json'
+        + os.sep + config_file
     try:
         with open(config_path, 'r') as fl:
             config = json.load(fl)
-        validate_config(config)
-        if not config.get('external_media'):
-            config['external_media'] = False
+        validator(config)
         return config
 
     except FileNotFoundError:
-        logger.error(u'找不到config.json')
+        logger.error(u'找不到 %s', config_file)
         exit(1)
     except json.decoder.JSONDecodeError:
-        logger.error(u'config.json有语法错误，用网上的json validator检查一下吧')
+        logger.error(u'%s 有语法错误，用网上的json validator检查一下吧',
+                     config_file)
         exit(1)
     except KeyError as err:
-        logger.error(u'config.json里缺少这个选项："%s"', err.args[0])
+        logger.error(u'%s 里缺少这个选项："%s"', config_file, err.args[0])
         exit(1)
 
-### Database        
+
+### Mastodon account helper
+
+def validate_token(token_config):
+    """Retrieve options from CONFIG. If some options are not present,
+Python will emit KeyError."""
+    for user in token_config:
+        user['id']
+        user['token']
+
+def get_mast_dict(token_file, url):
+    """Return a MAST_DICT.
+MAST_DICT is a hash map from weibo author id (string) to Mastodon
+instances.
+TOKEN_FILE is the filename for the token file.
+"""
+    # Because multiple weibo authors could share a single token, we
+    # create an auxiliary dictionary mapping tokens to Mastodon
+    # instances. Then we map authors to instances by their assigned
+    # token. This way we avoid creating duplicate instances for the
+    # same token for different authors.
+    token_instance_map = {}
+    token_config = get_config(token_file, validate_token)
+    mast_dict = {}
+    for user in token_config:
+        id = user['id']
+        token = access_token=user['token']
+        if token_instance_map.get(token) != None:
+            # Instance already created, use it.
+            mast_dict[id] = token_instance_map.get(token)
+        else:
+            # Instance doesn’t exist, create it.
+            mast = Mastodon(access_token=token,
+                            api_base_url=url, request_timeout=30)
+            mast_dict[id] = mast
+            token_instance_map[token] = mast
+    return mast_dict
+
+
+### Database
 
 def get_db():
     """Return the database."""
@@ -444,13 +492,13 @@ def record_older_than(record, n):
 
 if __name__ == '__main__':
     db = get_db()
-    url = get_config()['mastodon_instance_url']
-    mast = Mastodon(access_token=access_token(), api_base_url=url,
-                    request_timeout=30)
+    url = get_config(CONFIG_FILE)['mastodon_instance_url']
+    mast_dict = get_mast_dict(TOKEN_FILE, url)
+
     while True:
         logger.info(u'醒了，运行中')
         # Reload configuration on-the-fly.
-        config = get_config()
+        config = get_config(CONFIG_FILE)
         try:
             post_list = get_weibo_posts(config, db)
         except Exception as e:
@@ -461,7 +509,7 @@ if __name__ == '__main__':
         for post in post_list:
             summary = post['text'][:30].replace('\n', ' ')
             try:
-                records = cross_post(post, mast, config, db)
+                records = cross_post(post, mast_dict, config, db)
                 record_success(records, db)
                 if records != []:
                     logger.info(u'转发了%s的微博：%s...',
