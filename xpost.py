@@ -212,7 +212,11 @@ cannot find a Mastodon instance from dict for the weibo author.
         post_url = f'https://m.weibo.cn/detail/{post["id"]}'
         text += f'源：{post_url}\n'
 
-    # 6. Toot!
+    # 7. If this is a lottery post, replace with placeholder text
+    if '微博抽奖平台' in post['text'] or '转发抽奖' in post['text']:
+       text = '（没意思的抽奖微博）'
+
+    # 8. Toot!
     toot = mast.status_post(text, in_reply_to_id=orig_toot_id,
                             media_ids=media_list)
     post_record_list.append(make_post_record(post, toot))
@@ -291,8 +295,6 @@ DB is the database."""
         str(post['user_id']), 'include_repost', config)
     if cross_posted_p(post, db) \
        or ((not include_repost) and post_repost_p(post)) \
-       or '微博抽奖平台' in post['text'] \
-       or '转发抽奖' in post['text'] \
        or failed_many_times(post, db):
         # TODO: Other filters.
         return False
