@@ -170,7 +170,7 @@ cannot find a Mastodon instance from dict for the weibo author.
         if standalone_repost:
             # If the original weibo is already cross posted, we don’t
             # cross post it again.
-            orig_toot_id = get_toot_by_weibo(post, db)
+            orig_toot_id = get_toot_by_weibo(orig_post, db)
             if orig_toot_id == None:
                 orig_record_list = cross_post(orig_post, mast_dict,
                                               config, db, mast)
