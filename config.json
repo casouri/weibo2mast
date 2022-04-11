@@ -15,5 +15,6 @@
   "mastodon_instance_url": "https://mastodon.social",
   "toot_len_limit": 500,
   "max_attachment_count": 4,
-  "delete_after_days": 3
+  "delete_after_days": 3,
+  "external_media": false
 }
