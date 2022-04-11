@@ -37,6 +37,7 @@ python -m pip install -r requirements.txt
   "include_repost": true,
   "include_post_url": false,
   "standalone_repost": true,
+  "external_media": false
 }
 ```
 - 把`"user_list"`里`"id"`对应的值改成你想要跟踪的`user_id`。
@@ -46,6 +47,7 @@ python -m pip install -r requirements.txt
 - 如果`"include_repost"`是`true`，bot会转发原创和转发微博，`false`的话只转发原创微博。
 - 如果`"standalone_repost"`是`true`，bot会把转发微博和转发微博转发的微博分开转发，`false`的话会合在一起转发。（转发微博对应的嘟嘟会回复转发微博转发的微博对应的嘟嘟w）
 - 如果`"include_post_url"`是`"true"`，bot会在转发的时候附上原微博的地址。
+- `"external_media"`是一个开发者自用的选项，开启的话bot会用特殊的格式表示视频和图片，其他人留成`"false"`就好。
 
 上面说的`"include_repost"`、`"standalone_repost"`也可以为某个用户单独设置，比如我不想转发这个用户的转发微博：
 
