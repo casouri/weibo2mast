@@ -85,7 +85,7 @@ If RECURSIVE is True, also include url's from original post."""
     return url_list
 
 
-def upload_media(url_list):
+def upload_media(url_list, max_attatchment):
     """Upload media in URL_LIST.
 URL_LIST should be a list of MEDIA_URL. Return (TOOT_LIST, TOO_LARGE,
 TOO_MANY). TOOT_LIST is a list of TOOT_DICT.
@@ -140,7 +140,7 @@ cannot find a Mastodon instance from dict for the weibo author.
     media_too_many = False
     if not external_media:
         media_list, media_too_large, media_too_many = \
-            upload_media(url_list[:max_attatchment])
+            upload_media(url_list, max_attatchment)
 
     # Come up with a Mastodon instance for tooting.
     mast = mast_dict.get(user_id)
