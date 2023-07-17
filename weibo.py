@@ -711,46 +711,24 @@ class Weibo(object):
             js = self.get_weibo_json(page)
             if js['ok']:
                 weibos = js['data']['cards']
-                if self.query:
-                    weibos = weibos[0]['card_group']
                 for w in weibos:
                     if w['card_type'] == 9:
-                        wb = self.get_one_weibo(w)
-                        if wb:
-                            if wb['id'] in self.weibo_id_list:
-                                continue
-                            created_at = datetime.strptime(
-                                wb['created_at'], '%Y-%m-%d')
-                            since_date = datetime.strptime(
-                                self.user_config['since_date'], '%Y-%m-%d')
-                            if created_at < since_date:
-                                if self.is_pinned_weibo(w):
-                                    continue
-                                else:
-                                    logger.info(
-                                        u'{}已获取{}({})的第{}页{}微博{}'.format(
-                                            '-' * 30, self.user['screen_name'],
-                                            self.user['id'], page,
-                                            '包含"' + self.query +
-                                            '"的' if self.query else '',
-                                            '-' * 30))
-                                    return True
-                            if (not self.is_pinned_weibo(w)) \
-                               and ((not self.filter)
-                                    or ('retweet' not in wb.keys())):
-                                self.weibo.append(wb)
-                                self.weibo_id_list.append(wb['id'])
-                                self.got_count += 1
-                                self.print_weibo(wb)
-                            else:
-                                logger.info(u'正在过滤转发微博')
-            else:
-                return True
-            logger.info(u'{}已获取{}({})的第{}页微博{}'.format(
-                '-' * 30, self.user['screen_name'], self.user['id'], page,
-                '-' * 30))
+                        wb = w['mblog']
+                        if (not self.filter) or ('retweeted_status' not in wb):
+                            self.weibo.append(self.parse_weibo(wb))
+                if self.user['statuses_count'] > 0:
+                    progress = self.got_count / self.user['statuses_count']
+                    progress = '%.1f' % (progress * 100) + '%'
+                else:
+                    progress = '100%'
+                logger.info(u'已获取%s的%s的微博%s条', self.user['screen_name'],
+                            progress, self.got_count)
         except Exception as e:
             logger.exception(e)
+
+        if self.got_count >= self.user['statuses_count']:
+            return True
+        return False
 
     def get_page_count(self):
         """获取微博页数"""
